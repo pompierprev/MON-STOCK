@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestion – Comptes et stock</title>
+<style>
+  :root {
+    --ink: #1f2a37;
+    --muted: #6b7280;
+    --panel: #ffffff;
+    --page: #eef1f5;
+    --side: #1b2a41;
+    --side-hover: #263a58;
+    --accent: #2d6cdf;
+    --blue-row: #dbe8f8;
+    --beige-row: #f6edda;
+    --grey-row: #e7e7e7;
+    --white-row: #ffffff;
+    --dark-row: #3a3a3a;
+    --alert: #d62828;
+    --alert-on-dark: #ff6262;
+    --good: #1a7f4b;
+    --radius: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #12161c; --panel: #1b212b; --ink: #e8ecf1; --muted: #9aa5b4; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    background: var(--page); color: var(--ink); font-size: 16px;
+  }
+  button, input, select { font: inherit; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  /* Connexion */
+  #login { min-height: 100vh; display: grid; place-items: center; padding: 20px; background: var(--side); }
+  .login-box { background: var(--panel); padding: 32px; border-radius: var(--radius); width: 100%; max-width: 360px; }
+  .login-box h1 { margin: 0 0 4px; font-size: 1.4rem; }
+  .login-box p { margin: 0 0 20px; color: var(--muted); }
+  .login-box label { display: block; font-weight: 600; margin-bottom: 6px; }
+  .login-box input { width: 100%; padding: 10px 12px; border: 1px solid #b8c0cc; border-radius: 6px; background: #fff; color: #111; }
+  .login-box button { margin-top: 16px; width: 100%; padding: 11px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
+  .error { color: var(--alert); margin-top: 10px; min-height: 1.3em; font-weight: 600; }
+
+  /* Application */
+  #app { display: flex; min-height: 100vh; }
+  nav { width: 220px; background: var(--side); color: #fff; padding: 20px 12px; display: flex; flex-direction: column; flex-shrink: 0; }
+  nav h2 { font-size: 1.05rem; margin: 0 0 20px 10px; font-weight: 600; }
+  nav button.link {
+    display: block; width: 100%; text-align: left; background: none; border: 0; color: #cfd9e8;
+    padding: 12px 14px; border-radius: 6px; cursor: pointer; margin-bottom: 4px;
+  }
+  nav button.link:hover { background: var(--side-hover); }
+  nav button.link.active { background: var(--accent); color: #fff; font-weight: 600; }
+  nav .spacer { flex: 1; }
+  main { flex: 1; padding: 28px; min-width: 0; }
+  main h1 { margin: 0 0 18px; font-size: 1.6rem; }
+
+  .panel { background: var(--panel); border-radius: var(--radius); padding: 18px; margin-bottom: 22px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .panel h3 { margin: 0 0 12px; font-size: 1.1rem; }
+  .form-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: .85rem; color: var(--muted); }
+  .field input, .field select { padding: 8px 10px; border: 1px solid #b8c0cc; border-radius: 6px; background: #fff; color: #111; min-width: 0; }
+  .btn { padding: 9px 16px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
+  .btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .btn.danger { background: transparent; color: var(--alert); border: 1px solid var(--alert); }
+  .btn.small { padding: 5px 10px; font-size: .85rem; }
+
+  .table-wrap { overflow-x: auto; border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; color: #1b1b1b; }
+  th { background: var(--side); color: #fff; text-align: left; padding: 11px 12px; font-weight: 600; white-space: nowrap; }
+  td { padding: 10px 12px; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Comptes : une ligne sur deux bleue / beige */
+  #compteTable tbody tr:nth-child(odd)  { background: var(--blue-row); }
+  #compteTable tbody tr:nth-child(even) { background: var(--beige-row); }
+  #compteTable tfoot td { background: var(--side); color: #fff; font-weight: 700; }
+  .pos { color: var(--good); font-weight: 600; }
+  .neg { color: var(--alert); font-weight: 600; }
+
+  /* Stock : une ligne sur deux grise / blanche */
+  .stockTable tbody tr:nth-child(odd)  { background: var(--grey-row); }
+  .stockTable tbody tr:nth-child(even) { background: var(--white-row); }
+  .stockTable tbody tr.last { background: var(--dark-row) !important; color: #fff; }
+  .stockTable td.total { text-align: right; font-weight: 700; font-size: 1.1rem; width: 1%; white-space: nowrap; }
+  .stockTable tr.last td.total, .stockTable tr.last td.name { color: var(--alert-on-dark); font-weight: 700; }
+  .stockTable td.actions { width: 1%; white-space: nowrap; text-align: right; }
+  .qty-btn { width: 30px; height: 30px; border-radius: 6px; border: 1px solid #8a93a0; background: #fff; color: #111; cursor: pointer; font-weight: 700; }
+  .family-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .family-head h3 { margin: 0; }
+  .empty { color: var(--muted); padding: 10px 2px; }
+
+  /* Courses */
+  #courseTable tbody tr:nth-child(odd)  { background: var(--grey-row); }
+  #courseTable tbody tr:nth-child(even) { background: var(--white-row); }
+  #courseTable tbody tr.fait { background: var(--dark-row) !important; color: #fff; }
+  #courseTable tbody tr.fait span { text-decoration: line-through; color: var(--alert-on-dark); }
+
+  /* Stock : deux colonnes Garage / Maison */
+  .stock-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  .stock-col > h2 { margin: 0 0 12px; text-align: center; background: var(--side); color: #fff; padding: 10px; border-radius: 6px; font-size: 1.1rem; letter-spacing: 1px; }
+
+  @media (max-width: 900px) {
+    .stock-columns { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 720px) {
+    #app { flex-direction: column; }
+    nav { width: 100%; flex-direction: row; align-items: center; padding: 10px; overflow-x: auto; }
+    nav h2 { display: none; }
+    nav button.link { width: auto; margin: 0 4px 0 0; white-space: nowrap; }
+    nav .spacer { display: none; }
+    main { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Connexion administrateur -->
+<section id="login">
+  <form class="login-box" id="loginForm" autocomplete="off">
+    <h1>Espace administrateur</h1>
+    <p>Saisissez votre code pour accéder à la gestion.</p>
+    <label for="code">Code administrateur</label>
+    <input id="code" type="password" autocomplete="off" required>
+    <button type="submit">Se connecter</button>
+    <div class="error" id="loginError" role="alert"></div>
+  </form>
+</section>
+
+<!-- Application -->
+<div id="app" hidden>
+  <nav>
+    <h2>Gestion</h2>
+    <button class="link active" data-page="comptes">Comptes</button>
+    <button class="link" data-page="stock">Stock</button>
+    <button class="link" data-page="courses">Courses</button>
+    <div class="spacer"></div>
+    <button class="link" id="logout">Se déconnecter</button>
+  </nav>
+
+  <main>
+    <!-- COMPTES -->
+    <section id="page-comptes">
+      <h1>Comptes</h1>
+      <div class="panel">
+        <h3>Ajouter une ligne</h3>
+        <div class="form-row">
+          <div class="field"><label for="cAnnee">Année</label><input id="cAnnee" type="number" min="2000" max="2100" style="width:100px"></div>
+          <div class="field"><label for="cMois">Mois</label><select id="cMois"></select></div>
+          <div class="field"><label for="cEntree">Entrée (€)</label><input id="cEntree" type="number" step="0.01" min="0" style="width:130px"></div>
+          <div class="field"><label for="cSortie">Sortie (€)</label><input id="cSortie" type="number" step="0.01" min="0" style="width:130px"></div>
+          <button class="btn" id="addCompte">Ajouter</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="table-wrap">
+          <table id="compteTable">
+            <thead>
+              <tr>
+                <th>Année</th><th>Mois</th>
+                <th class="num">Entrée</th><th class="num">Sortie</th>
+                <th class="num">Résultat par unité</th><th class="num">Résultat total</th><th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <p class="empty" id="compteEmpty">Aucune ligne pour le moment. Ajoutez votre premier mois ci-dessus.</p>
+      </div>
+    </section>
+
+    <!-- STOCK -->
+    <section id="page-stock" hidden>
+      <h1>Stock</h1>
+      <div class="panel">
+        <h3>Ajouter une famille de produits</h3>
+        <div class="form-row">
+          <div class="field"><label for="famName">Nom de la famille</label><input id="famName" type="text" style="width:240px"></div>
+          <button class="btn" id="addFamily">Ajouter la famille</button>
+        </div>
+      </div>
+      <div class="stock-columns">
+        <div class="stock-col" data-col="garage">
+          <h2>GARAGE</h2>
+          <div id="familiesGarage"></div>
+        </div>
+        <div class="stock-col" data-col="maison">
+          <h2>MAISON</h2>
+          <div id="familiesMaison"></div>
+        </div>
+      </div>
+      <p class="empty" id="familyEmpty">Aucune famille pour le moment. Créez-en une ci-dessus.</p>
+    </section>
+
+    <!-- COURSES -->
+    <section id="page-courses" hidden>
+      <h1>Courses</h1>
+      <div class="panel">
+        <h3>Magasin</h3>
+        <div class="form-row">
+          <div class="field"><label for="magName">Nom du magasin</label><input id="magName" type="text" style="width:240px" placeholder="Ex : Leclerc, Lidl…"></div>
+          <button class="btn" id="saveMag">Enregistrer</button>
+        </div>
+        <p class="empty" id="magAffiche" style="font-weight:700;font-size:1.1rem"></p>
+      </div>
+      <div class="panel">
+        <h3>Liste de courses</h3>
+        <div class="form-row">
+          <div class="field"><label for="artName">Article à ajouter</label><input id="artName" type="text" style="width:240px"></div>
+          <button class="btn" id="addArt">Ajouter l'article</button>
+        </div>
+        <div class="table-wrap" style="margin-top:14px">
+          <table id="courseTable">
+            <thead><tr><th>Article</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="empty" id="courseEmpty">Aucun article pour le moment. Ajoutez-en un ci-dessus.</p>
+        <button class="btn danger small" id="delDone" style="margin-top:12px" hidden>Supprimer les articles faits</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const ADMIN_CODE = "ISA0102Pnosi";
+const MOIS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+
+/* Sauvegarde : navigateur si disponible, sinon mémoire */
+const mem = {};
+const store = {
+  get(k, def) {
+    try { const v = localStorage.getItem(k); if (v !== null) return JSON.parse(v); } catch (e) {}
+    return k in mem ? mem[k] : def;
+  },
+  set(k, v) {
+    mem[k] = v;
+    try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {}
+  }
+};
+
+let comptes = store.get("comptes", []);   // {id, annee, mois, entree, sortie}
+let courses = store.get("courses", { magasin: "", articles: [] }); // {magasin, articles:[{id, nom, fait}]}
+let familles = store.get("familles", []).map(f => ({
+  id: f.id, nom: f.nom,
+  produits: (f.produits || []).map(p => ({
+    id: p.id, nom: p.nom,
+    garage: (typeof p.garage === "number") ? p.garage : (p.qte || 0),
+    maison: (typeof p.maison === "number") ? p.maison : 0
+  }))
+})); // {id, nom, produits:[{id, nom, garage, maison}]}
+
+const $ = (s) => document.querySelector(s);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const eur = (n) => n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+/* Connexion */
+$("#loginForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if ($("#code").value === ADMIN_CODE) {
+    $("#login").hidden = true; $("#app").hidden = false;
+    $("#loginError").textContent = "";
+    renderComptes(); renderStock();
+  } else {
+    $("#loginError").textContent = "Code incorrect. Réessayez.";
+  }
+  $("#code").value = "";
+});
+$("#logout").addEventListener("click", () => {
+  $("#app").hidden = true; $("#login").hidden = false;
+});
+
+/* Menu */
+document.querySelectorAll("nav button[data-page]").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll("nav button[data-page]").forEach(x => x.classList.toggle("active", x === b));
+    $("#page-comptes").hidden = b.dataset.page !== "comptes";
+    $("#page-stock").hidden = b.dataset.page !== "stock";
+    $("#page-courses").hidden = b.dataset.page !== "courses";
+  });
+});
+
+/* ---------- COMPTES ---------- */
+$("#cMois").innerHTML = MOIS.map((m, i) => `<option value="${i}">${m}</option>`).join("");
+const now = new Date();
+$("#cAnnee").value = now.getFullYear();
+$("#cMois").value = now.getMonth();
+
+$("#addCompte").addEventListener("click", () => {
+  const annee = parseInt($("#cAnnee").value, 10);
+  const mois = parseInt($("#cMois").value, 10);
+  const entree = parseFloat($("#cEntree").value) || 0;
+  const sortie = parseFloat($("#cSortie").value) || 0;
+  if (!annee) { $("#cAnnee").focus(); return; }
+  comptes.push({ id: uid(), annee, mois, entree, sortie });
+  store.set("comptes", comptes);
+  $("#cEntree").value = ""; $("#cSortie").value = "";
+  renderComptes();
+});
+
+function renderComptes() {
+  const rows = [...comptes].sort((a, b) => a.annee - b.annee || a.mois - b.mois);
+  let cumul = 0, tE = 0, tS = 0;
+  const cls = (n) => n > 0 ? "pos" : n < 0 ? "neg" : "";
+  $("#compteTable tbody").innerHTML = rows.map(r => {
+    const res = r.entree - r.sortie;
+    cumul += res; tE += r.entree; tS += r.sortie;
+    return `<tr>
+      <td>${r.annee}</td><td>${MOIS[r.mois]}</td>
+      <td class="num">${eur(r.entree)}</td><td class="num">${eur(r.sortie)}</td>
+      <td class="num ${cls(res)}">${eur(res)}</td>
+      <td class="num ${cls(cumul)}">${eur(cumul)}</td>
+      <td class="num"><button class="btn danger small" data-del="${r.id}" aria-label="Supprimer la ligne ${MOIS[r.mois]} ${r.annee}">Supprimer</button></td>
+    </tr>`;
+  }).join("");
+  $("#compteTable tfoot").innerHTML = rows.length ? `<tr>
+    <td colspan="2">Total</td><td class="num">${eur(tE)}</td><td class="num">${eur(tS)}</td>
+    <td class="num">${eur(tE - tS)}</td><td class="num">${eur(tE - tS)}</td><td></td></tr>` : "";
+  $("#compteEmpty").hidden = rows.length > 0;
+}
+$("#compteTable").addEventListener("click", (e) => {
+  const id = e.target.dataset.del;
+  if (!id) return;
+  if (confirm("Supprimer cette ligne ?")) {
+    comptes = comptes.filter(c => c.id !== id);
+    store.set("comptes", comptes); renderComptes();
+  }
+});
+
+/* ---------- COURSES ---------- */
+$("#magName").value = courses.magasin || "";
+
+$("#saveMag").addEventListener("click", () => {
+  courses.magasin = $("#magName").value.trim();
+  store.set("courses", courses);
+  renderCourses();
+});
+$("#magName").addEventListener("keydown", e => { if (e.key === "Enter") $("#saveMag").click(); });
+
+$("#addArt").addEventListener("click", () => {
+  const nom = $("#artName").value.trim();
+  if (!nom) { $("#artName").focus(); return; }
+  courses.articles.push({ id: uid(), nom, fait: false });
+  $("#artName").value = "";
+  store.set("courses", courses);
+  renderCourses();
+});
+$("#artName").addEventListener("keydown", e => { if (e.key === "Enter") $("#addArt").click(); });
+
+function renderCourses() {
+  $("#magAffiche").textContent = courses.magasin ? "Magasin : " + courses.magasin : "Aucun magasin enregistré.";
+  $("#courseTable tbody").innerHTML = courses.articles.map(a => `
+    <tr class="${a.fait ? "fait" : ""}" data-art="${a.id}">
+      <td><label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" data-act="toggle" ${a.fait ? "checked" : ""} style="width:20px;height:20px">
+        <span>${esc(a.nom)}</span>
+      </label></td>
+      <td class="num"><button class="btn danger small" data-act="del">Supprimer</button></td>
+    </tr>`).join("");
+  $("#courseEmpty").hidden = courses.articles.length > 0;
+  $("#delDone").hidden = !courses.articles.some(a => a.fait);
+}
+
+$("#courseTable").addEventListener("change", (e) => {
+  const artEl = e.target.closest("[data-art]");
+  if (!artEl) return;
+  const art = courses.articles.find(a => a.id === artEl.dataset.art);
+  if (!art) return;
+  art.fait = e.target.checked;
+  store.set("courses", courses);
+  renderCourses();
+});
+$("#courseTable").addEventListener("click", (e) => {
+  const act = e.target.dataset.act;
+  if (act !== "del") return;
+  const artEl = e.target.closest("[data-art]");
+  if (!artEl) return;
+  const art = courses.articles.find(a => a.id === artEl.dataset.art);
+  if (!art) return;
+  courses.articles = courses.articles.filter(a => a !== art);
+  store.set("courses", courses);
+  renderCourses();
+});
+$("#delDone").addEventListener("click", () => {
+  courses.articles = courses.articles.filter(a => !a.fait);
+  store.set("courses", courses);
+  renderCourses();
+});
+
+/* ---------- STOCK ---------- */
+function saveStock() { store.set("familles", familles); renderStock(); }
+
+$("#addFamily").addEventListener("click", () => {
+  const nom = $("#famName").value.trim();
+  if (!nom) { $("#famName").focus(); return; }
+  familles.push({ id: uid(), nom, produits: [] });
+  $("#famName").value = "";
+  saveStock();
+});
+$("#famName").addEventListener("keydown", e => { if (e.key === "Enter") $("#addFamily").click(); });
+
+function famCard(f, col) {
+  const rows = f.produits.map(p => `
+              <tr class="${p[col] <= 1 ? "last" : ""}" data-prod="${p.id}">
+                <td class="name">${esc(p.nom)}</td>
+                <td class="actions">
+                  <button class="qty-btn" data-act="minus" aria-label="Retirer un ${esc(p.nom)}">−</button>
+                  <button class="qty-btn" data-act="plus" aria-label="Ajouter un ${esc(p.nom)}">+</button>
+                  <button class="btn ghost small" data-act="delProd">Retirer</button>
+                </td>
+                <td class="total">${p[col]}</td>
+              </tr>`).join("");
+  return `
+    <div class="panel" data-fam="${f.id}">
+      <div class="family-head">
+        <h3>${esc(f.nom)}</h3>
+        <button class="btn danger small" data-act="delFam">Supprimer la famille</button>
+      </div>
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="field"><label>Nouveau produit</label><input type="text" class="pNom" style="width:220px"></div>
+        <div class="field"><label>Quantité</label><input type="number" min="0" value="1" class="pQte" style="width:90px"></div>
+        <button class="btn" data-act="addProd">Ajouter le produit</button>
+      </div>
+      ${f.produits.length ? `
+      <div class="table-wrap">
+        <table class="stockTable">
+          <thead><tr><th>Produit</th><th></th><th class="num">${col === "garage" ? "Garage" : "Maison"}</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>` : `<p class="empty">Aucun produit dans cette famille.</p>`}
+    </div>`;
+}
+
+function renderStock() {
+  $("#familyEmpty").hidden = familles.length > 0;
+  $("#familiesGarage").innerHTML = familles.map(f => famCard(f, "garage")).join("");
+  $("#familiesMaison").innerHTML = familles.map(f => famCard(f, "maison")).join("");
+}
+
+function stockAction(e) {
+  const act = e.target.dataset.act;
+  if (!act) return;
+  const colRoot = e.target.closest("[data-col]");
+  if (!colRoot) return;
+  const col = colRoot.dataset.col;
+  const famEl = e.target.closest("[data-fam]");
+  const fam = familles.find(f => f.id === famEl.dataset.fam);
+  if (!fam) return;
+
+  if (act === "delFam") {
+    if (confirm(`Supprimer la famille « ${fam.nom} » et tous ses produits des deux listes ?`)) {
+      familles = familles.filter(f => f !== fam); saveStock();
+    }
+    return;
+  }
+  if (act === "addProd") {
+    const nom = famEl.querySelector(".pNom").value.trim();
+    const qte = Math.max(0, parseInt(famEl.querySelector(".pQte").value, 10) || 0);
+    if (!nom) { famEl.querySelector(".pNom").focus(); return; }
+    fam.produits.push({ id: uid(), nom, garage: qte, maison: qte });
+    saveStock(); return;
+  }
+  const prodEl = e.target.closest("[data-prod]");
+  const prod = fam.produits.find(p => p.id === prodEl.dataset.prod);
+  if (!prod) return;
+  if (act === "plus") prod[col]++;
+  if (act === "minus") {
+    const autre = col === "garage" ? "maison" : "garage";
+    if (prod[col] > 0) { prod[col]--; prod[autre]++; }
+  }
+  if (act === "delProd") {
+    if (!confirm(`Retirer « ${prod.nom} » des deux listes ?`)) return;
+    fam.produits = fam.produits.filter(p => p !== prod);
+  }
+  saveStock();
+}
+$("#familiesGarage").addEventListener("click", stockAction);
+$("#familiesMaison").addEventListener("click", stockAction);
+
+$("#familiesGarage").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.classList.contains("pNom")) {
+    e.target.closest("[data-fam]").querySelector("[data-act=addProd]").click();
+  }
+});
+$("#familiesMaison").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.classList.contains("pNom")) {
+    e.target.closest("[data-fam]").querySelector("[data-act=addProd]").click();
+  }
+});
+</script>
+</body>
+</html>
