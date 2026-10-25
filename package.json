@@ -1,0 +1,9 @@
+{
+  "name": "gestion-comptes-stock-netlify",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gestion des comptes et du stock (version Netlify)",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}
