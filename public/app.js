@@ -495,7 +495,26 @@ function commit(msg) {
   });
 
   function render() { renderComptes(); renderStock(); renderCourses(); renderMenus(); }
-
+/* ---------- Import Excel ---------- */
+$('#importBtn').addEventListener('click', () => $('#importFile').click());
+$('#importFile').addEventListener('change', async (e) => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  if (!confirm('Remplacer les données actuelles par celles du fichier « ' + f.name + ' » ? Fait d'abord une exportation de secours si besoin.')) return;
+  setStatus('Import en cours…', false);
+  try {
+    const r = await fetch('/api/import', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream' }, body: f });
+    const data = await r.json().catch(() => null);
+    if (r.status === 200 && data) {
+      const d = await api('GET', '/api/data');
+      if (d.status === 200) { state = d.data; render(); }
+      setStatus(`Import réussi : ${data.comptes} lignes de comptes, ${data.produits} produits.`, false);
+    } else {
+      setStatus((data && data.error) || 'Import impossible.', true);
+    }
+  } catch (err) { setStatus("Erreur réseau pendant l'import.", true); }
+});
   /* ---------- Démarrage ---------- */
   loadData().catch(() => { showLogin(); });
 })();
