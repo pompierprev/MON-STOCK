@@ -122,7 +122,7 @@ export default async (req, context) => {
       const db = await loadDb();
       const type = url.searchParams.get("type");
       const d = new Date().toISOString().slice(0, 10);
-      const name = ["comptes", "stock", "courses", "menus"].includes(type) ? `${type}-${d}.xlsx` : `gestion-${d}.xlsx`;
+      const name = ["comptes", "stock", "courses"].includes(type) ? `${type}-${d}.xlsx` : `gestion-${d}.xlsx`;
       return new Response(exportXlsx(db, type), {
         status: 200,
         headers: {
@@ -133,7 +133,8 @@ export default async (req, context) => {
         },
       });
     }
- /* ---------- Import Excel ---------- */
+
+    /* ---------- Import Excel ---------- */
     if (method === "POST" && p === "/api/import") {
       const buf = Buffer.from(await req.arrayBuffer());
       if (!buf.length) return json(400, { error: "Fichier vide." });
@@ -149,7 +150,7 @@ export default async (req, context) => {
         if (typeof v === 'number' && v >= 1 && v <= 12) return v - 1;
         const t = nrm(v); const i = MOIS_FR.indexOf(t);
         if (i >= 0) return i;
-        if (t.length >= 3) { const p = MOIS_FR.findIndex(m => m.startsWith(t.slice(0, 4))); if (p >= 0) return p; }
+        if (t.length >= 3) { const idx = MOIS_FR.findIndex(m => m.startsWith(t.slice(0, 4))); if (idx >= 0) return idx; }
         return 0;
       };
       const lignes = (ws) => ws ? XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null }) : [];
@@ -203,6 +204,7 @@ export default async (req, context) => {
       await store().setJSON("data", saved);
       return json(200, { rev: saved.rev, comptes: saved.comptes.length, produits: saved.familles.reduce((n, f) => n + f.produits.length, 0) });
     }
+
     return json(404, { error: "Introuvable." });
   } catch (e) {
     return json(400, { error: "Requête invalide." });
