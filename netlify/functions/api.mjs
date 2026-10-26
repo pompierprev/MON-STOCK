@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { getStore } from "@netlify/blobs";
 import lib from "./lib.js";
+import * as XLSX from "xlsx";
 
 const { sanitize, exportXlsx } = lib;
 
@@ -132,7 +133,76 @@ export default async (req, context) => {
         },
       });
     }
+ /* ---------- Import Excel ---------- */
+    if (method === "POST" && p === "/api/import") {
+      const buf = Buffer.from(await req.arrayBuffer());
+      if (!buf.length) return json(400, { error: "Fichier vide." });
+      let wb;
+      try { wb = XLSX.read(buf, { type: "buffer" }); }
+      catch { return json(400, { error: "Fichier Excel illisible." }); }
 
+      const nrm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      const MOIS_FR = ['janvier','fevrier','mars','avril','mai','juin','juillet','aout','septembre','octobre','novembre','decembre'];
+      const RAY = [['hygiene','Hygiène'],['entretien','Entretien'],['alimentation','Alimentation'],['boisson','Boisson']];
+      const nb = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+      const moisDe = (v) => {
+        if (typeof v === 'number' && v >= 1 && v <= 12) return v - 1;
+        const t = nrm(v); const i = MOIS_FR.indexOf(t);
+        if (i >= 0) return i;
+        if (t.length >= 3) { const p = MOIS_FR.findIndex(m => m.startsWith(t.slice(0, 4))); if (p >= 0) return p; }
+        return 0;
+      };
+      const lignes = (ws) => ws ? XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null }) : [];
+      const cand = { comptes: [], familles: RAY.map(([id, nom]) => ({ id, nom, produits: [] })), courses: { fresh: [], leclerc: { hygiene: [], entretien: [], alimentation: [], boisson: [] } } };
+
+      lignes(wb.Sheets['Comptes']).forEach((r, idx) => {
+        if (idx === 0 || !r || !nb(r[0])) return;
+        cand.comptes.push({ annee: Math.round(nb(r[0])), mois: moisDe(r[1]), intitule: String(r[2] || '').trim(), entree: Math.round(nb(r[3]) * 100) / 100, sortie: Math.round(nb(r[4]) * 100) / 100 });
+      });
+
+      let famC = null;
+      lignes(wb.Sheets['Stock']).forEach((r) => {
+        if (!r) return;
+        const pleines = r.filter(c => c !== null && c !== undefined && String(c).trim() !== '');
+        if (!pleines.length) { famC = null; return; }
+        if (pleines.length === 1) { famC = cand.familles.find(f => nrm(f.nom) === nrm(pleines[0])) || null; return; }
+        if (!famC || nrm(r[0]) === 'produit') return;
+        const nom = String(r[0] || '').trim();
+        if (!nom) return;
+        const garage = Math.max(0, Math.round(nb(r[1])));
+        const maison = (r[3] !== null && r[3] !== undefined && String(r[3]).trim() !== '') ? Math.max(0, Math.round(nb(r[4]))) : Math.max(0, Math.round(nb(r[2])));
+        famC.produits.push({ nom, garage, maison });
+      });
+
+      let listeC = null;
+      lignes(wb.Sheets['Courses']).forEach((r) => {
+        if (!r) return;
+        const pleines = r.filter(c => c !== null && c !== undefined && String(c).trim() !== '');
+        if (!pleines.length) { listeC = null; return; }
+        if (pleines.length === 1) {
+          const t = nrm(pleines[0]);
+          if (t === 'fresh') listeC = cand.courses.fresh;
+          else if (t.startsWith('leclerc')) {
+            const nom = t.replace(/^leclerc\s*-*\s*/, '');
+            const ray = RAY.find(([id, n]) => nrm(n) === nom || nrm(n).startsWith(nom.slice(0, 5)));
+            listeC = ray ? cand.courses.leclerc[ray[0]] : null;
+          } else listeC = null;
+          return;
+        }
+        if (!listeC || nrm(r[0]) === 'designation') return;
+        const nom = String(r[0] || '').trim();
+        if (!nom) return;
+        listeC.push({ nom, fait: /oui|true|x/i.test(String(r[1] || '')) });
+      });
+
+      const rien = !cand.comptes.length && !cand.familles.some(f => f.produits.length) && !cand.courses.fresh.length && !RAY.some(([r]) => cand.courses.leclerc[r].length);
+      if (rien) return json(400, { error: "Aucune donnée reconnue (feuilles Comptes/Stock/Courses ?)." });
+
+      const db = await loadDb();
+      const saved = { ...sanitize(cand), rev: db.rev + 1 };
+      await store().setJSON("data", saved);
+      return json(200, { rev: saved.rev, comptes: saved.comptes.length, produits: saved.familles.reduce((n, f) => n + f.produits.length, 0) });
+    }
     return json(404, { error: "Introuvable." });
   } catch (e) {
     return json(400, { error: "Requête invalide." });
